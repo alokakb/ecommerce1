@@ -1,0 +1,60 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Razorpay Test Payment</title>
+</head>
+
+<body>
+
+<button id="rzp-button1">Pay with Razorpay</button>
+
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+<script>
+    var options = {
+        "key": "{{ razorpay_key_id }}",
+        "amount": "{{ amount }}",
+        "currency": "{{ currency }}",
+        "order_id": "{{ razorpay_order_id }}",
+
+        "name": "My Ecommerce",
+        "description": "Test Transaction",
+
+        "handler": function (response) {
+            console.log("Payment successful");
+
+            console.log("Payment ID:", response.razorpay_payment_id);
+            console.log("Order ID:", response.razorpay_order_id);
+            console.log("Signature:", response.razorpay_signature);
+        }
+    };
+
+
+    var rzp1 = new Razorpay(options);
+
+    console.log("KEY:", options.key);
+    console.log("AMOUNT:", options.amount);
+    console.log("CURRENCY:", options.currency);
+    console.log("ORDER ID:", options.order_id);
+
+
+    // This is useful for testing failed payments.
+    rzp1.on('payment.failed', function (response) {
+        console.log("Payment failed");
+
+        console.log("Code:", response.error.code);
+        console.log("Description:", response.error.description);
+        console.log("Reason:", response.error.reason);
+        console.log("Order ID:", response.error.metadata.order_id);
+        console.log("Payment ID:", response.error.metadata.payment_id);
+    });
+
+    document.getElementById('rzp-button1').onclick = function(e) {
+        rzp1.open();
+        e.preventDefault();
+    };
+</script>
+
+</body>
+</html>
