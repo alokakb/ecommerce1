@@ -3,7 +3,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.db import transaction
 
-from orders.models import Refund
+from payments.models import Refund
 import razorpay
 import logging
 

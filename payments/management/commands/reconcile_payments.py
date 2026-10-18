@@ -2,8 +2,7 @@ from datetime import timedelta
 
 from django.core.management import BaseCommand
 from django.utils import timezone
-
-from orders.models import Payment
+from payments.models import Payment
 from payments.services.payment_reconciliation import PaymentReconciliationService
 
 

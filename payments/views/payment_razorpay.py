@@ -7,9 +7,9 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from orders.constants import RAZORPAY_STATUS_MAP, STRIPE_STATUS_MAP, PAYPAL_STATUS_MAP
-from orders.models import Order, Payment
-from payments.models import PaymentEvent
+from payments.constants import RAZORPAY_STATUS_MAP
+from orders.models import Order
+from payments.models import PaymentEvent, Payment
 from payments.services.process_payment import process_successful_payment, process_failed_payment
 from django.conf import settings
 
@@ -61,6 +61,7 @@ class RazorpayWebhookAPIView(APIView):
             .get("entity", {})
         )
         payment_id = payment_entity.get("id")
+        order_id = payment_entity.get("order_id")
         raw_status = payment_entity.get("status")
         order_no = (
             payment_entity
@@ -80,8 +81,8 @@ class RazorpayWebhookAPIView(APIView):
         with transaction.atomic():
             try:
                 with transaction.atomic():
-                    order = Order.objects.get(order_no=order_no)
-                    payment = Payment.objects.get(order=order,
+                    order = Order.objects.select_for_update().get(order_no=order_no)
+                    payment = Payment.objects.select_for_update().get(order=order,
                                                   provider="razorpay",
                                                   status="unpaid")
                     PaymentEvent.objects.create(event_id=event_id,
@@ -90,16 +91,26 @@ class RazorpayWebhookAPIView(APIView):
                                                 provider='Razorpay'
                                                 )
             except IntegrityError:
-                return Response({'Status': 'Processed'}, status=status.HTTP_200_OK)
+                if PaymentEvent.objects.filter(event_id=event_id).exists():
+                    logger.info('Duplicate Razorpay webhook event %s ', event_id)
+                    return Response({'Status': 'Processed'}, status=status.HTTP_200_OK)
+                logger.exception('Unexpected Integrity Error creating PaymentEvent for event %s', event_id)
+                raise
             except Order.DoesNotExist:
                 return Response({'Error' : 'Order does not exist'}, status=status.HTTP_400_BAD_REQUEST)
             except Payment.DoesNotExist:
-                return Response({'Error' : 'Payment does not exist or already paid'}, status=status.HTTP_400_BAD_REQUEST)
+                # handle existing payment if it is already captured/failed, webhook must not retry
+                existing_payment = Payment.objects.filter(order=order, provider='razorpay',
+                                                          gateway_order_id=order_id).first()
+                if existing_payment and existing_payment.status == 'captured':
+                    return Response({'status': 'Already paid'}, status=status.HTTP_200_OK)
+                if existing_payment and existing_payment.status == 'failed':
+                    return Response({'status': 'Payment attempt was failed'}, status=status.HTTP_200_OK)
+                return Response({'Error' : 'Payment attempt not found'}, status=status.HTTP_400_BAD_REQUEST)
 
             try:
                 if not payment.gateway_payment_id:
                     payment.gateway_payment_id = payment_id
-                    payment.save(update_fields=["gateway_payment_id"])
 
                 payment.payment_method = payment_method
                 payment.save(update_fields=["gateway_payment_id", "payment_method"])
@@ -109,6 +120,16 @@ class RazorpayWebhookAPIView(APIView):
                     process_successful_payment(order, payment)
                 elif translated_status == 'failed':
                     process_failed_payment(order, payment)
+                elif translated_status == "pending":
+                    logger.info(
+                        "Payment is not terminal yet; order_no=%s, raw_status=%s",
+                        order_no,raw_status,)
+                    return Response({"status": "pending"},status=status.HTTP_200_OK)
+                else:
+                    logger.warning(
+                        "Unhandled Razorpay payment status; order_no=%s, raw_status=%s",
+                        order_no,raw_status,)
+                    return Response({"error": "Unhandled payment status"},status=status.HTTP_400_BAD_REQUEST)
                 return Response({"status":"processed"}, status=status.HTTP_200_OK)
 
             except Exception:
@@ -259,7 +280,6 @@ class TestRazorpayPaymentCheckoutAPIView(APIView):
                 {"error": "order_no is required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        print("order No : " + order_no)
         try:
             order = (
                 Order.objects
