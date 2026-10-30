@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'sellers',
     'idempotency',
     'payments',
+    'notifications',
     'django.contrib.postgres',
     'django_filters',
     'rest_framework',
@@ -174,6 +175,32 @@ SIMPLE_JWT = {
         'rest_framework_simplejwt.tokens.AccessToken',
     )
 }
+
+NOTIFICATION_CHANNELS = {
+    "email": {
+        "enabled": True,
+        "provider": "gmail",
+    },
+    "whatsapp": {
+        "enabled": False,
+        "provider": "meta",
+    },
+}
+
+# Email notification variables
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+
+EMAIL_HOST = "smtp.gmail.com"
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_USE_SSL = False
+
+EMAIL_HOST_USER = os.environ["EMAIL_HOST_USER"]
+EMAIL_HOST_PASSWORD = os.environ["EMAIL_HOST_PASSWORD"]
+
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+
+EMAIL_TIMEOUT = 10
 
 # Razorpay API credentials
 RAZORPAY_KEY = os.environ["RAZORPAY_KEY"]
