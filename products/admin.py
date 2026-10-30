@@ -1,8 +1,6 @@
-from dataclasses import field
 
 from django.contrib import admin
 
-from orders.models import Order
 from products.models import Product, Category, ProductVariant
 
 

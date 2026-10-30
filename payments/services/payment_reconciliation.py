@@ -1,9 +1,7 @@
 from django.conf import settings
 from django.db import transaction
-from rest_framework import status
-from rest_framework.response import Response
 
-from orders.models import Payment
+from payments.models import Payment
 import razorpay
 import logging
 
@@ -28,7 +26,7 @@ class PaymentReconciliationService:
         )
         gateway_payment_resp = response.get("items", [])
         if not gateway_payment_resp:
-            logger.info("Razorpay could not find any payment against this order gateway_order_id : % ", payment.gateway_order_id)
+            logger.info("Razorpay could not find any payment against this order gateway_order_id : %s ", payment.gateway_order_id)
             return {
                 "status": "no action",
                 "gateway_order_id": payment.gateway_order_id,

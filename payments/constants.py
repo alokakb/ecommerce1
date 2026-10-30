@@ -34,12 +34,12 @@ PAYPAL_STATUS_MAP = {
 
 GATEWAY_REGISTRY = {
     'razorpay': {
-        'url_template': 'https://api.razorpay.com/v1/orders/{order_no}',
+        'url_template': 'https://api.razorpay.com/v1/orders/{gateway_order_id}',
         'status_map': RAZORPAY_STATUS_MAP,
         'status_json_path': ['status']
     },
     'stripe': {
-        'url_template': 'https://api.stripe.com/v1/payment_intents/{order_no}',
+        'url_template': 'https://api.stripe.com/v1/payment_intents/{gateway_order_id}',
         'status_map': STRIPE_STATUS_MAP,
         'status_json_path': ['status']
     },

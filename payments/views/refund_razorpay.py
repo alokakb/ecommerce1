@@ -1,22 +1,21 @@
+from decimal import Decimal
+
+import requests
 from django.db import transaction, IntegrityError
 from django.utils import timezone
-
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.conf import settings
-from orders.models import Order, Refund, Payment
-from payments.models import PaymentEvent
-from idempotency.models import IdempotencyRecord
-
 import razorpay
 import logging
 
-from requests import exceptions
-
+from orders.models import Order
+from payments.models import PaymentEvent, Payment, Refund
 from payments.services.process_refund import process_successful_refund, process_failed_refund
+
 logger = logging.getLogger(__name__)
 
 
@@ -26,9 +25,6 @@ class RefundWebhookAPIView(APIView):
     def post(self, request):
         payload_body = request.body.decode('utf-8')
         signature = request.headers.get('X-Razorpay-Signature')
-
-        print("Refund webhook HEADERS: ", request.headers)
-        print("Refund webhook BODY: \n", payload_body)
 
         if not signature:
             return Response({
@@ -88,11 +84,11 @@ class RefundWebhookAPIView(APIView):
         with transaction.atomic():
             try:
                 with transaction.atomic():
-                    order = Order.objects.get(order_no=order_no)
-                    payment = Payment.objects.get(order=order,
+                    order = Order.objects.select_for_update().get(order_no=order_no)
+                    payment = Payment.objects.select_for_update().get(order=order,
                                                   status='captured',
                                                   provider='razorpay')
-                    refund = Refund.objects.get(payment=payment, status='processing')
+                    refund = Refund.objects.select_for_update().get(payment=payment, status='processing')
 
                     # Before creating PaymentEvent :
                     # Validation of payment_id and refund_id
@@ -107,7 +103,17 @@ class RefundWebhookAPIView(APIView):
                                                 provider='Razorpay'
                                                 )
             except IntegrityError:
-                return Response({'Status': 'Processed'}, status=status.HTTP_200_OK)
+                # Only acknowledge this as a duplicate if the event exists
+                if PaymentEvent.objects.filter(event_id=event_id).exists():
+                    logger.info("Duplicate refund webhook received: %s", event_id)
+                    return Response(
+                        {"message": "Webhook already processed."},
+                        status=status.HTTP_200_OK,
+                    )
+
+                # raise if some other integrity constraint failed
+                logger.exception("Unexpected integrity error creating PaymentEvent")
+                raise
             except Order.DoesNotExist:
                 return Response({'Error' : 'Order does not exist'}, status=status.HTTP_404_NOT_FOUND)
             except Payment.DoesNotExist:
@@ -117,7 +123,7 @@ class RefundWebhookAPIView(APIView):
 
 
             try:
-                refund.amount = amount / 100
+                refund.amount = Decimal(amount) / Decimal(100)
                 refund.currency = currency
                 if refund_status == 'processed':
                     process_successful_refund(order, refund)
@@ -146,9 +152,6 @@ class RefundInitiateAPIView(APIView):
         # TODO: Next phase : Phase 2
         # Add operation-specific idempotency for refund initiation.
         # Current phase relies on Order row locking + refund_status.
-
-        # payload = request.data
-        # order_no = payload.get("order_no")
 
         if not order_no:
             return Response({'Error': 'order_no is required.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -187,11 +190,16 @@ class RefundInitiateAPIView(APIView):
                 # 3. A new refund attempt is allowed.
                 refund = Refund.objects.create(payment=payment, status='created')
 
+                # remove after use :
+                print('gateway_payment_id : ', payment.gateway_payment_id)
+                print('payment status : ', payment.status)
+
                 client = razorpay.Client(auth=(settings.RAZORPAY_KEY, settings.RAZORPAY_SECRET))
                 try:
                     refund_response = client.payment.refund(
                         payment.gateway_payment_id, {}
                     )
+
                     print("Refund payload: \n", refund_response)
                     refund_id = refund_response.get("id")
                     refund_status = refund_response.get("status")
@@ -225,11 +233,14 @@ class RefundInitiateAPIView(APIView):
                         status=status.HTTP_502_BAD_GATEWAY
                     )
 
+
                 except razorpay.errors.BadRequestError as e:
                     refund.status = 'failed'
                     refund.save(update_fields=['status'])
+                    logger.exception("Razorpay refund request rejected")
+                    logger.error("Razorpay error details: %s", getattr(e, "args", None))
                     return Response(
-                        {"error": f"Razorpay bad request: {str(e)}"},
+                        {"error": f"Razorpay bad request {e}"},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
             except Order.DoesNotExist:
