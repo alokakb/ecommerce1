@@ -22,7 +22,10 @@ from rest_framework.routers import DefaultRouter
 from products.serializers.public import GlobalMenuCategorySerializer
 from products.views.public import CategoryDrillDownAPIView, ProductDetailAPIView, GlobalMenuAPIView, \
     ProductSearchFilterAPIView
-from products.views.seller import SellerProductCreateView
+from products.views.seller import SellerProductCreateView, SellerProductVariantCreateView, \
+    SellerProductUpdateAndDeleteView, SellerProductRecoverView, SellerProductVariantUpdateAndDeleteView, \
+    SellerProductVariantRecoverView
+from products.views.staff_admin import AdminCategoryCreateAPIView, AdminCategoryUpdateAndDeleteView
 from users.views import MyProfileView, RegisterView, LogoutView
 from sellers.views import SellerRegisterView
 
@@ -36,6 +39,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include(router.urls)),
     path('auth/', include('rest_framework.urls', namespace = 'rest_framework')),
+    path('', include('django_prometheus.urls')),
 
     path('api/v1/auth/register/', RegisterView.as_view(), name='customer-register'),
     path('api/v1/auth/seller/register/', SellerRegisterView.as_view(), name='seller-register'),
@@ -46,6 +50,17 @@ urlpatterns = [
     path('profile/', MyProfileView.as_view()),
 
     path('api/v1/seller/products/create/', SellerProductCreateView.as_view(), name='seller-product-create'),
+    path('api/v1/seller/products/<int:product_id>/variants/', SellerProductVariantCreateView.as_view(), name='seller-product-variant-create'),
+    path('api/v1/seller/products/<int:product_id>/', SellerProductUpdateAndDeleteView.as_view(), name='seller-product-update-and-delete'),
+    path('api/v1/seller/products/<int:product_id>/status/', SellerProductRecoverView.as_view(),
+         name='seller-product-recover'),
+    path('api/v1/seller/products/<int:product_id>/variants/<int:variant_id>/', SellerProductVariantUpdateAndDeleteView.as_view(), name='seller-product-variant-update-and-delete'),
+    path('api/v1/seller/products/<int:product_id>/variants/<int:variant_id>/status/',
+         SellerProductVariantRecoverView.as_view(), name='seller-product-variant-recover'),
+
+    path('api/v1/admin/categories/', AdminCategoryCreateAPIView.as_view(), name='admin-category-create'),
+    path('api/v1/admin/categories/<int:category_id>/', AdminCategoryUpdateAndDeleteView.as_view(), name='admin-category-update-and-delete'),
+
 
     # Catalog Navigation Engine
     path('api/v1/catalog/', CategoryDrillDownAPIView.as_view(), name='catalog-root'),

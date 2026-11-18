@@ -1,8 +1,7 @@
 from django.contrib.postgres.indexes import GinIndex
 from django.core.validators import MinValueValidator
 from django.db import models
-from django.utils.text import slugify
-
+from products.services.slug_manager import create_slug
 
 # Create your models here.
 class Category(models.Model):
@@ -15,16 +14,13 @@ class Category(models.Model):
     filterable_attributes = models.JSONField(default=dict, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name_plural = "Categories"
 
     def save(self, *args, **kwargs):
-        if not self.slug:
-            if self.parent:
-                self.slug = slugify(f"{self.parent.slug}-{self.name}")
-            else:
-                self.slug = slugify(self.name)
+        create_slug(self)
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -61,8 +57,7 @@ class Product(models.Model):
         ordering = ['-created_at']
 
     def save(self, *args, **kwargs):
-        if not self.slug:
-            self.slug = slugify(self.name)
+        create_slug(self)
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -81,6 +76,8 @@ class ProductVariant(models.Model):
     # Inventory
     stock_quantity = models.PositiveIntegerField(default=0, validators = [MinValueValidator(0)])
     low_stock_threshold = models.PositiveIntegerField(default=5)
+    is_active = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         indexes = [
