@@ -11,6 +11,7 @@ from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import Profile
@@ -57,12 +58,24 @@ class LogoutView(APIView):
     def post(self, request, *args, **kwargs):
         try:
             refresh_token = request.data.get('refresh')
+
+            if not refresh_token:
+                return Response(
+                    {"error": "Refresh token is required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             token = RefreshToken(refresh_token)
             token.blacklist()
-            return Response({"message": "Logged out successfully"}, status=status.HTTP_205_RESET_CONTENT)
-        except Exception as e:
-            return Response({'error':e}, status.HTTP_400_BAD_REQUEST)
-
+            return Response(
+                {"message": "Logged out successfully"},
+                status=status.HTTP_205_RESET_CONTENT,
+            )
+        except TokenError:
+            return Response(
+                {"error": "Invalid or expired refresh token"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
 
 

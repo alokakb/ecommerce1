@@ -1,4 +1,3 @@
-from unicodedata import category
 
 from products.models import Category
 
@@ -14,3 +13,4 @@ class CategoryTreeService:
             descendant_ids.extend(CategoryTreeService.get_all_descendant_ids(child))
 
         return descendant_ids
+

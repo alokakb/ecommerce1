@@ -33,8 +33,7 @@ class GlobalMenuCategorySerializer(CategorySerializer):
         fields = CategorySerializer.Meta.fields + ['children']
 
     def get_children(self, obj):
-        active_children = obj.children.filter(is_active=True)
-        return CategorySerializer(active_children, many=True).data
+        return CategorySerializer(obj.active_children, many=True).data
 
 
 class ProductVariantSerializer(serializers.ModelSerializer):
