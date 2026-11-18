@@ -1,5 +1,7 @@
+import uuid
+
 from django.db import models
-from django.db.models import Q
+from django.db.models import Q, JSONField
 
 from orders.models import Order
 
@@ -108,3 +110,47 @@ class PaymentEvent(models.Model):
 
     class Meta:
         db_table = 'orders_paymentevent'
+
+
+
+class OutboxEvent(models.Model):
+    event_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    event_type = models.CharField(max_length=100)
+    aggregate_id = models.CharField(max_length=100)
+    payload = models.JSONField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    published_at = models.DateTimeField(blank=True, null=True)
+    attempts = models.PositiveIntegerField(default=0)
+    last_error = models.TextField(blank=True, null=True)
+    next_attempt_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["event_type", "aggregate_id"],
+                name="unique_event",
+            )
+        ]
+
+    def save(self, *args, **kwargs):
+        update_fields = kwargs.get("update_fields")
+
+        if update_fields is not None:
+            update_fields = set(update_fields)
+            update_fields.add("updated_at")
+            kwargs["update_fields"] = update_fields
+
+        super().save(*args, **kwargs)
+
+
+
+
+class ProcessedEvent(models.Model):
+    event_id = models.UUIDField(unique=True)
+    event_type = models.CharField(max_length=100)
+    processed_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.event_type} : {self.event_id}"
+

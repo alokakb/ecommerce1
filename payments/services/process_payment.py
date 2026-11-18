@@ -6,6 +6,8 @@ import logging
 from payments.exceptions import ConfigurationError
 from orders.services import process_checkout
 
+from payments.services import outbox
+
 import requests
 
 logger = logging.getLogger(__name__)
@@ -57,6 +59,9 @@ def process_successful_payment(order: Order, payment: Payment):
         return
     payment.status = 'captured'
     payment.save(update_fields=["status"])
+
+    # populate outbox event
+    outbox.create_payment_captured_event(payment)
 
     process_checkout.process_successful_checkout(order)
 
